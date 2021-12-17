@@ -1,10 +1,3 @@
-class Param:
-
-    def __init__(self, name, min_val, max_val):
-        self.name = name
-        self.min_val = min_val
-        self.max_val = max_val
-
 
 class Sweeper:
 
