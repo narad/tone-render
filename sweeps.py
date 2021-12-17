@@ -29,3 +29,8 @@ class Sweeper:
 				v = v / 10
 				z = {**setting, **{first.name : v}}
 				yield z
+
+
+	def tied_sweep(self, tied_params):
+		pass
+

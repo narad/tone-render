@@ -1,38 +1,81 @@
-import reapy
-import reapy.reascript_api as RPR
+"""
+The main data generation script
+
+This module utilizes Reapy to create a project in the
+REAPER DAW, load an FX item (typically a VST instrument)
+and loop audio through many possible settings of its
+parameters.  Basic info on the FX item, provided in a
+yaml config file, is required.
+
+Example:
+    Examples can be given using either the ``Example`` or ``Examples``
+    sections. Sections support any reStructuredText formatting, including
+    literal blocks::
+
+        $ python render_data.py --di_file dis/prog-metal/prog-metal-1.wav
+                                --conf_file "vsts/NDSP Nameless Amp/nameless.yaml"
+                                --output_dir "/output"
+                                --reaper_dir "/Documents/REAPER Media/"
+                                --copy_method sox
+"""
 
 import sys
-import yaml
-
-import pathlib
-import glob
-
-from sweeps import Sweeper, Param
-from utils import seconds_to_str, byte_to_str
-
+import argparse
+# import glob
+from pathlib import Path
 # For generating extended DI outside of Python
 import subprocess
+
+from typing import Dict, List
+
+import yaml
+
 
 # For segmenting processed wavs
 from pydub import AudioSegment
 from pydub.utils import make_chunks
 
+import reapy
+import reapy.reascript_api as RPR
+from reapy.core.project import Project
+from reapy.core.track import Track
 
 
-message_mode = ['stdout', 'console', 'both'][0]
-real_time_mult = 11.5
-path_to_reaper_output = "/Users/narad/Documents/REAPER Media/"
-output_dir = "/Users/narad/Desktop/reaper_out/"
-
-def msg(m):
-    if message_mode == 'stdout' or message_mode == 'both':
-        print(str(m))
-    elif message_mode == 'console' or message_mode == 'both':
-        RPR.ShowConsoleMsg(str(m) + "\n")
+from sweeps import Sweeper, Param
+from utils import seconds_to_str, byte_to_str
 
 
-def get_fx_envelopes(track, param_names, fx_number=0, threshold=-1):
-    msg("Collecting parameters...")
+# How do you want your messages logged?
+MSG_MODE = ['stdout', 'console', 'both'][0]
+
+
+def msg(message: str) -> None:
+    """
+    Outputs the logging message to stdout or to the REAPER console
+    Args:
+        message (str): The logging message
+
+    Returns:
+        None
+    """
+    if MSG_MODE in ('stdout', 'both'):
+        print(message)
+    if MSG_MODE in ('console', 'both'):
+        RPR.ShowConsoleMsg(message + "\n")
+
+
+def get_fx_envelopes(track: Track, param_names: List[str], fx_number: int=0, threshold: int=-1) -> Dict[str,str]:
+    """
+    Returns the FX envelopes for the param_names provided.
+    Args:
+        track (reapy.core.track.Track): The Track on which the FX is added
+        param_names (List[str]): The names of the FXParams to change
+        fx_number (int): The idx of the fx (should be 0 unless multiple FX)
+        threshold (int): Maximum number of envelopes to collect
+
+    Returns:
+        dict[str,str]: a mapping of envelope names to their corresponding envelope ID str
+    """
     name2env = dict()
     for i, p in enumerate(track.fxs[0].params):
         if threshold > 0 and i >= threshold:
@@ -46,19 +89,94 @@ def get_fx_envelopes(track, param_names, fx_number=0, threshold=-1):
     return name2env
 
 
-# def insertpt(time, settings_d, name2env):
-#   for key, val in settings_d.items():
-#     RPR.InsertEnvelopePoint(name2env[key], 
-#                             time, 
-#                             val, 
-#                             1, 0, False, True)
+def copy_DI_sox(project, track, infile, outfile, times, verbose=False):
+    """
+    Lengthens the DI to cover the duration of desired samples using SoX
+    Args:
+            project (reapy.core.project.Project): The Track on which the FX is added
+            track (reapy.core.track.Track): The Track on which the FX is added
+            infile (Path): The original DI file
+            outfile (Path): The output DI file
+            times (int): Number of times to repeat the DI
+
+    Returns:
+        None
+    """
+    # Create a long DI file, looping the original
+    cmd = f'sox {infile} {outfile} repeat {times-1}'
+    if verbose:
+        msg("Generating new DI with following command via sox:\n" + cmd)
+    process = subprocess.run(cmd.split(" "),
+                             stdout=subprocess.PIPE,
+                             universal_newlines=True)
+    # Bring the new extended DI clip onto the original track
+    RPR.SetOnlyTrackSelected(track.id)
+    project.cursor_position = 0
+    RPR.InsertMedia(str(outfile), 0)
 
 
-def generate_data(di_filename, yaml_filename):
+def copy_DI_reapy(project, track, di_file, times, margin):
+    """
+    Lengthens the DI to cover the duration of desired samples using repeated calls
+    to the REAPER API via Reapy.
+
+    Args:
+            project (reapy.core.project.Project): The Track on which the FX is added
+            track (reapy.core.track.Track): The Track on which the FX is added
+            di_file (Path): The original DI file
+            times (int): Number of times to repeat the DI
+
+    Returns:
+        None
+    """
+    # Get the absolute path filename
+    filename = str(di_file.resolve())
+    # Gives this track focus, making it the receiver of InsertMedia calls
+    RPR.SetOnlyTrackSelected(track.id)
+    # inside_reaper() context helps with the API limitations for repetitive calls
+    with reapy.inside_reaper():
+        for _ in range(times-1):
+            project.cursor_position += margin
+            RPR.InsertMedia(filename, 0)
+
+
+def split_audio(wav_file, clip_len, output_dir):
+    """
+    Splits the rendered audio .wav file into many, one for each setting
+
+    Args:
+            wav_file (Path): The output .wav file generated by REAPER
+            clip_len (float): The length in seconds of each clip
+            output_dir (Path): The output directory to write split files
+
+    Returns:
+        None
+    """
+    # Split into chunks
+    audio = AudioSegment.from_file(wav_file , "wav")
+    chunk_length_ms = clip_len * 1000 # pydub calculates in millisec
+    chunks = make_chunks(audio, chunk_length_ms)
+    # If the output dir does not exist, make it
+    output_dir.mkdir(parents=True, exist_ok=True)
+    # Write to file
+    for i, chunk in enumerate(chunks):
+        chunk.export(output_dir / f"{i:08d}.wav", format="wav")
+
+
+def generate_data(args):
+    """
+    The main data generation function
+
+    Args:
+            args (argparse): The configuration options specifying how to generate data
+
+    Returns:
+        None
+    """
     # Read yaml settings for VST sweep
-    with open(yaml_filename) as file:
-        sweep_info = yaml.load(file)
-    param_names = [p['name'] for p in sweep_info['params']]
+    with open(args.conf_file) as infile:
+        vst_info = yaml.load(infile)
+    param_names = [p['name'] for p in vst_info['params']]
 
     # Start Reaper project
     project = reapy.Project()
@@ -66,108 +184,136 @@ def generate_data(di_filename, yaml_filename):
         track.delete()
     project.cursor_position = 0
 
-
     # Load DI on to track
-    di_filename = str(pathlib.Path(di_filename).resolve())
-    RPR.InsertMedia(di_filename, 0)
+    RPR.InsertMedia(str(args.di_file.resolve()), 0)
     track = project.tracks[0]
     clip_len = project.cursor_position
 
     # Load VST
-    track.add_fx(sweep_info['vst'])
+    track.add_fx(vst_info['vst'])
 
     # Read VST params
     fx_number = 0
+    if args.verbose:
+        msg("Collecting parameters...")
     name2env = get_fx_envelopes(track, param_names, fx_number)
 
     # Set default VST param values from yaml
     plist = track.fxs[0].params
-    for pdict in sweep_info['defaults']:
+    for pdict in vst_info['defaults']:
         pname = pdict["name"]
         try:
             plist[pname] = pdict["value"]
         except:
-            print("Warning, error setting default value for: ", pname)
+            if args.verbose:
+                msg("Warning, error setting default value for: ", pname)
 
     # Compute sweeps
     params = []
-    for p_dict in sweep_info['params']:
+    for p_dict in vst_info['params']:
         params.append(Param(p_dict['name'], p_dict['min'], p_dict['max']))
     sweeper = Sweeper(params)
     sweeps = sweeper.full_sweep()
+    sweeps = list(sweeps)
+    num_sweeps = len(sweeps)
 
     # Print stats on sweep beforehand
-    sweeps = list(sweeps)
-    time_in_secs = len(sweeps) * clip_len
-    time_in_minutes = time_in_secs / 60.0
-    mb_per_minute = 8 * 1048576
-    size_in_mb = byte_to_str(time_in_minutes * mb_per_minute)
-    print(f"Beginning sweep of {len(sweeps)} settings, recording {clip_len}s of each.")
-    print(f"This will create roughly {seconds_to_str(time_in_secs)} ({size_in_mb}) of audio.")
+    if args.verbose:
+        time_in_seconds = num_sweeps * clip_len
+        size_in_mb = byte_to_str(time_in_seconds * args.mb_per_second)
+        msg(f"Beginning sweep of {len(sweeps)} settings, recording {clip_len}s of each.")
+        msg(f"This will create roughly {seconds_to_str(time_in_seconds)} ({size_in_mb}) of audio.")
 
-    # # Loop DI to match the number of envelope changes
-    # # The method below does this more efficiently
-    # # using a call out to sox
-    infile = di_filename
-    outfile = output_dir + "full_di.wav"
-    # times = 3 # len(sweeps)
-    # cmd = f'sox {infile} {outfile} repeat {times}'
-    # print("cmd: ", cmd)
-    # process = subprocess.run(cmd.split(" "), 
-    #                          stdout=subprocess.PIPE, 
-    #                          universal_newlines=True)
-    # The following can also be used, but can be an overwhelming
-    # amount of calls for the Reaper API 
-    RPR.SetOnlyTrackSelected(track.id)
-    with reapy.inside_reaper():
-        for _ in range(len(sweeps)-1):
-            RPR.InsertMedia(di_filename, 0)
-
-    # Bring the new extended DI clip onto the original track
-    # RPR.SetOnlyTrackSelected(track.id)
-    # RPR.InsertMedia(outfile, 0)
+    # Loop DI to match the number of envelope changes
+    if args.copy_method == "sox":
+        # copy via calls out to sox
+        copy_DI_sox(project,
+                    track,
+                    infile=args.di_file,
+                    outfile=args.output_dir / args.sox_di_name,
+                    times=num_sweeps,
+                    margin=args.margin)
+    else:
+        # copy via Reapy
+        copy_DI_reapy(project,
+                      track, 
+                      args.di_file, 
+                      times=num_sweeps,
+                      margin=args.margin)
 
     # Specify sweeps over parameters as changes in FX param envelopes
-    t = 0
+    time = 0
     for setting in sweeps:
         for param_name, param_val in setting.items():
-            fx_env = name2env[param_name]
-            RPR.InsertEnvelopePoint(fx_env, t, param_val, 1, 0, False, True)
-        t += clip_len
+            RPR.InsertEnvelopePoint(name2env[param_name], time, param_val, 1, 0, False, True)
+        time += clip_len
+        time += args.margin
 
     # Render file
     RPR.Main_OnCommand(42230, 0)
 
     # Postprocess the rendered file
-    list_of_paths = pathlib.Path(path_to_reaper_output).glob('*')   
-    rendered_file = max(list_of_paths, key=lambda p: p.stat().st_ctime)
-    # Split into chunks
-    audio = AudioSegment.from_file(rendered_file , "wav") 
-    chunk_length_ms = clip_len * 1000 # pydub calculates in millisec
-    chunks = make_chunks(audio, chunk_length_ms) #Make chunks of one sec
-    # Write to file
-    for i, chunk in enumerate(chunks):
-        chunk.export(f"reaper_out/{i:08d}.wav", format="wav")
+    # Identify the most recent .wav in Reaper output dir
+    reaper_output_files = args.reaper_dir.glob('*.wav')
+    rendered_file = max(reaper_output_files, key=lambda p: p.stat().st_ctime)
+    # Split into chunks into the provided new output dir
+    split_audio(rendered_file, clip_len + args.margin, args.output_dir)
 
+    # Clean up
+    if args.delete_tmp_files:
+        # Delete the unsplit rendered file
+        if args.verbose:
+            msg("Deleting rendered file: " + rendered_file)
+        rendered_file.unlink()
+        # Delete the DI file made by SoX
+        sox_file  = args.output_dir / args.sox_di_name
+        if (args.copy_method == 'sox' and sox_file.is_file()):
+            if args.verbose:
+                msg("Deleting DI file generated by sox: " + rendered_file)
+            sox_file.unlink()
+        # Delete the extra file that comes from space at the end of the DI
+        extra_file = args.output_dir / f"{num_sweeps:08d}.wav"
+        if extra_file.is_file():
+            extra_file.unlink()
 
     # write out settings in index file
-    with open(pathlib.Path(output_dir) / pathlib.Path("settings.yaml"), "w") as settings_file:
+    with open(args.output_dir / "settings.yaml", "w") as settings_file:
         for i, setting in enumerate(sweeps):
-            settings_file.write(f"- filename: {i:08d}.wav\n")
-            settings_file.write(f"  settings:\n")
+            settings_file.write(f"- filename: {i:08d}.wav\n" +
+                                "settings:\n")
             for param_name, param_val in setting.items():
                 settings_file.write(f"  - {param_name}: {param_val}\n")
 
 
 
 if __name__ == '__main__':
-    di_filename = sys.argv[1]
-    yaml_filename = sys.argv[2]
-    generate_data(di_filename, yaml_filename)
+    parser = argparse.ArgumentParser(description='Options for VST rendering.')
+    parser.add_argument('--di_file', type=Path, required=True,
+                        help='path to a DI wav file')
+    parser.add_argument('--conf_file', type=Path, required=True,
+                        help='path to a VST FXParam config file')
+    parser.add_argument('--output_dir', type=Path, required=True,
+                        help="the directory where data will be written")
+    parser.add_argument('--reaper_dir', type=Path, required=True,
+                        help="the directory Reaper writes files to")
+    parser.add_argument('--copy_method', type=str, choices=['sox', 'reapy'],
+                        help="the method used to copy the DI for each sweep")
+    parser.add_argument('--margin', type=float, default=0.1,
+                        help="amount of blank audio between DIs in seconds")
+    parser.add_argument('--delete_tmp_files', type=bool, default=True,
+                        help="delete the intermediary files made during rendering")
+    parser.add_argument('--mb_per_second', type=int, default=139810,
+                        help="constant used for estimating diskspace requirement")
+    parser.add_argument('--sox_di_name', type=str, default="full_di.wav",
+                        help="name of the generated long DI file if using SoX copy_method")
+    parser.add_argument('--verbose', type=bool, default=False,
+                        help="whether to print logging information")
+    args = parser.parse_args()
 
+    # Check args for safety
+    if not args.conf_file.is_file():
+        sys.exit("fConfig file <{args.conf_file}> not found.")
+    if not args.di_file.is_file():
+        sys.exit(f"DI file <{args.di_file}> not found.")
 
-
-
-
-# RPR.Main_OnCommand(41824, 0) <- keeps the render dialogue open
-
+    generate_data(args)
