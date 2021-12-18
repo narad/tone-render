@@ -10,12 +10,26 @@ https://github.com/narad/amp-space
 
 # Instructions
 
-So you have a VST you're interested in sampling.  The following 
+So you have a VST you're interested in sampling.  To do this using the ToneRender package, you need to create/specify the following things:
 
-Things you need to create/specify:
-- A config file describing the FXParams, their values, and their indices used from within Reaper.  
+- A config file describing the FXParams, their values, and their indices used from within Reaper.
+- A source waveform (a DI, or direct input, if using an amplifier or FX VST)
+- A sweep file specifying what parameter configurations to test
+
+With these in place, generating audio samples is as simple as running the main script:
 
 `python3 render_data.py <DI-wav-file> <VST-config-YAML-file>`
+
+How to create these is outlined below:
+
+### 1. Creating a config file containing VST information
+
+### 2. Providing a source waveform
+
+Currently ToneRender only supports condition sample generation, i.e., some audio file is transformed by the VST instrument, resulting in an output audio sample.  You can create your own source recording, or use one of the provided waveforms.  The /dis folder contains sample guitar DIs for a variety of music genres.
+
+### 3. Specifying a Parameter Sweep
+
 
 ## Requirements
 
