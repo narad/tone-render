@@ -42,8 +42,7 @@ from reapy.core.project import Project
 from reapy.core.track import Track
 
 
-from sweeps import Sweeper
-from vst import VSTConfig
+from sweeps import Sweeper, SweepConfig
 from utils import seconds_to_str, byte_to_str
 
 
@@ -91,7 +90,7 @@ def get_fx_envelopes(track: Track, param_names: List[str], fx_number: int=0, thr
     return name2env
 
 
-def copy_DI_sox(project, track, infile, outfile, times, verbose=False) -> None:
+def copy_DI_sox(project, infile, outfile, times, verbose=False) -> None:
     """
     Lengthens the DI to cover the duration of desired samples using SoX
     Args:
@@ -105,19 +104,19 @@ def copy_DI_sox(project, track, infile, outfile, times, verbose=False) -> None:
         None
     """
     # Create a long DI file, looping the original
-    cmd = f'sox {infile} {outfile} repeat {times-1}'
+    cmd = f'sox {infile} {outfile} repeat {times}'
     if verbose:
         msg("Generating new DI with following command via sox:\n" + cmd)
     process = subprocess.run(cmd.split(" "),
                              stdout=subprocess.PIPE,
                              universal_newlines=True)
     # Bring the new extended DI clip onto the original track
-    RPR.SetOnlyTrackSelected(track.id)
+    # RPR.SetOnlyTrackSelected(track.id)
     project.cursor_position = 0
     RPR.InsertMedia(str(outfile), 0)
 
 
-def copy_DI_reapy(project, track, di_file, times, margin) -> None:
+def copy_DI_reapy(project, di_file, times, margin) -> None:
     """
     Lengthens the DI to cover the duration of desired samples using repeated calls
     to the REAPER API via Reapy.
@@ -133,16 +132,18 @@ def copy_DI_reapy(project, track, di_file, times, margin) -> None:
     """
     # Get the absolute path filename
     filename = str(di_file.resolve())
+    project.cursor_position = 0
+
     # Gives this track focus, making it the receiver of InsertMedia calls
-    RPR.SetOnlyTrackSelected(track.id)
+#    RPR.SetOnlyTrackSelected(track.id)
     # inside_reaper() context helps with the API limitations for repetitive calls
     with reapy.inside_reaper():
-        for _ in range(times-1):
+        for _ in range(times):
             project.cursor_position += margin
             RPR.InsertMedia(filename, 0)
 
 
-def split_audio(wav_file, clip_len, output_dir) -> None:
+def split_audio(wav_file, clip_len, output_dir, idx_offset=0) -> None:
     """
     Splits the rendered audio .wav file into many, one for each setting
 
@@ -162,7 +163,7 @@ def split_audio(wav_file, clip_len, output_dir) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     # Write to file
     for i, chunk in enumerate(chunks):
-        chunk.export(output_dir / f"{i:08d}.wav", format="wav")
+        chunk.export(output_dir / f"{i+idx_offset:08d}.wav", format="wav")
 
 
 def delete_tmp_files(files: List[Path], verbose: bool=False) -> None:
@@ -193,108 +194,133 @@ def generate_data(args):
         None
     """
     # Read yaml settings for VST sweep
-    config = VSTConfig(args.conf_file)
+    config = SweepConfig(args.conf_file)
 
     # Start Reaper project
     project = reapy.Project()
+
+    # Compute sweeps
+    sweeper = Sweeper(config)
+    file_offset = 0
+    for sweep_name, sweep in sweeper.sweeps:
+        sweep = list(sweep)
+        print(f"Performing sweep {sweep_name}")
+        # # Print stats on sweep beforehand
+        # if args.verbose:
+        #     time_in_seconds = len(sweeps) * clip_len
+        #     size_in_mb = byte_to_str(time_in_seconds * args.mb_per_second)
+        #     msg(f"Beginning sweep of {len(sweeps)} settings, recording {clip_len}s of each.")
+        #     msg(f"This will create roughly {seconds_to_str(time_in_seconds)} ({size_in_mb}) of audio.")
+        perform_sweep(sweep, project, config.vst_name, config.default_values(), args, file_offset)
+        file_offset += len(sweep)
+
+    # write out settings in index file
+    sweeper.write(args.output_dir / "settings.yaml", args.di_file)
+
+    # possibly copy the DI to the output directory
+    if args.copy_di:
+        shutil.copy(args.di_file, args.output_dir / args.di_file.name)
+
+
+
+def get_clip_len(file: Path, project: Project):
+    cp = project.cursor_position
+    # Load DI on to track
+    RPR.InsertMedia(str(file.resolve()), 0)
+    track = project.tracks[0]
+    clip_len = project.cursor_position
+    track.items[-1].delete()
+    project.cursor_position = cp
+    return clip_len
+
+
+def perform_sweep(sweep, project, vst_name, default_values, args, idx_offset):
+#    print(list(sweep))
+    # Delete all old tracks (and therefore the VST and envelopes)
     for track in project.tracks:
         track.delete()
     project.cursor_position = 0
 
-    # Load DI on to track
-    RPR.InsertMedia(str(args.di_file.resolve()), 0)
+    # Loop DI to match the number of settings changes
+    num_settings = len(sweep)
+    print("num settings = ", num_settings)
+    if args.copy_method == "sox":
+        # copy via calls out to sox
+        copy_DI_sox(project,
+                    infile=args.di_file,
+                    outfile=args.output_dir / args.sox_di_name,
+                    times=num_settings,
+                    margin=args.margin)
+    else:
+        # copy via Reapy
+        copy_DI_reapy(project,
+                      args.di_file, 
+                      times=num_settings,
+                      margin=args.margin)
+
+
+    # print("cp: ", project.cursor_position)
+    clip_len = int(project.cursor_position / num_settings)
+    # print(clip_len)
+
+
+    # Now that there is a track of audio, reference it
     track = project.tracks[0]
-    clip_len = project.cursor_position
 
     # Load VST
-    track.add_fx(config.vst_name)
+    track.add_fx(vst_name) #config.vst_name)
 
     # Read VST params
     fx_number = 0
     if args.verbose:
         msg("Collecting parameters...")
+    tunable_parameters = sweep[0].keys()
     name2env = get_fx_envelopes(track, 
-                                [p.name for p in config.tunable_parameters()], 
+                                tunable_parameters, #[p.name for p in config.tunable_parameters()], 
                                 fx_number)
 
     # Set default VST param values from yaml
     plist = track.fxs[fx_number].params
-    for pname, pvalue in config.default_values().items():
+    for pname, pvalue in default_values.items(): #config.default_values().items():
         try:
             plist[pname] = pvalue
         except:
             if args.verbose:
                 msg("Warning, error setting default value for: ", pname)
 
-    # Compute sweeps
-    sweeper = Sweeper(config.tunable_parameters())
-    sweeps = sweeper.full_sweep()
-    sweeps = list(sweeps)
-    num_sweeps = len(sweeps)
-
-    # Print stats on sweep beforehand
-    if args.verbose:
-        time_in_seconds = num_sweeps * clip_len
-        size_in_mb = byte_to_str(time_in_seconds * args.mb_per_second)
-        msg(f"Beginning sweep of {len(sweeps)} settings, recording {clip_len}s of each.")
-        msg(f"This will create roughly {seconds_to_str(time_in_seconds)} ({size_in_mb}) of audio.")
-
-    # Loop DI to match the number of envelope changes
-    if args.copy_method == "sox":
-        # copy via calls out to sox
-        copy_DI_sox(project,
-                    track,
-                    infile=args.di_file,
-                    outfile=args.output_dir / args.sox_di_name,
-                    times=num_sweeps,
-                    margin=args.margin)
-    else:
-        # copy via Reapy
-        copy_DI_reapy(project,
-                      track, 
-                      args.di_file, 
-                      times=num_sweeps,
-                      margin=args.margin)
 
     # Specify sweeps over parameters as changes in FX param envelopes
+    if args.verbose:
+        msg("Setting envelopes...")
     time = 0
-    for setting in sweeps:
+    for setting in sweep:
         for param_name, param_val in setting.items():
             RPR.InsertEnvelopePoint(name2env[param_name], time, param_val, 1, 0, False, True)
         time += clip_len
         time += args.margin
 
-    # Render file
+    # # Render file
+    if args.verbose:
+        msg("Rendering...")
     RPR.Main_OnCommand(42230, 0)
 
     # Postprocess the rendered file
+    if args.verbose:
+        msg("Processing rendered file...")
     # Identify the most recent .wav in Reaper output dir
     reaper_output_files = args.reaper_dir.glob('*.wav')
     rendered_file = max(reaper_output_files, key=lambda p: p.stat().st_ctime)
     # Split into chunks into the provided new output dir
-    split_audio(rendered_file, clip_len + args.margin, args.output_dir)
+    split_audio(rendered_file, clip_len + args.margin, args.output_dir, idx_offset)
 
     # Clean up
     if args.delete_tmp_files:
         delete_tmp_files([rendered_file,                            # Output of REAPER
                           args.output_dir / args.sox_di_name,       # Output of SoX
-                          args.output_dir / f"{num_sweeps:08d}.wav" # Excess audio from splitting
+                          args.output_dir / f"{num_settings+idx_offset:08d}.wav" # Excess audio from splitting
                           ],
                           verbose=args.verbose)
 
-    # write out settings in index file
-    with open(args.output_dir / "settings.yaml", "w") as settings_file:
-        settings_file.write(f"di_file: {args.di_file.name}\n")
-        settings_file.write("files:\n")
-        for i, setting in enumerate(sweeps):
-            settings_file.write(f"  - filename: {i:08d}.wav\n" +
-                                "    settings:\n")
-            for param_name, param_val in setting.items():
-                settings_file.write(f"    - {param_name}: {param_val}\n")
-
-    # possibly copy the DI to the output directory
-    if args.copy_di:
-        shutil.copy(args.di_file, args.output_dir / args.di_file.name)
 
 
 
@@ -331,3 +357,21 @@ if __name__ == '__main__':
         sys.exit(f"DI file <{args.di_file}> not found.")
 
     generate_data(args)
+
+
+
+
+
+
+
+
+
+    # # Load DI on to track
+    # RPR.InsertMedia(str(args.di_file.resolve()), 0)
+    # track = project.tracks[0]
+    # clip_len = project.cursor_position
+
+    # print(track.items)
+    # track.items[0].delete()
+    # print(track.items)
+    # Item.active_take
