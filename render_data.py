@@ -8,12 +8,10 @@ parameters.  Basic info on the FX item, provided in a
 yaml config file, is required.
 
 Example:
-    Examples can be given using either the ``Example`` or ``Examples``
-    sections. Sections support any reStructuredText formatting, including
-    literal blocks::
+    An example command to render data, given an existing config file::
 
         $ python render_data.py --di_file dis/prog-metal/prog-metal-1.wav
-                                --conf_file "vsts/NDSP Nameless Amp/nameless.yaml"
+                                --conf_file "config/NDSP Nameless Amp/nameless.yaml"
                                 --output_dir "/output"
                                 --reaper_dir "/Documents/REAPER Media/"
                                 --copy_method sox
@@ -183,6 +181,18 @@ def delete_tmp_files(files: List[Path], verbose: bool=False) -> None:
             file.unlink()
 
 
+
+def get_clip_len(file: Path, project: Project):
+    project.cursor_position = 0
+    # Load DI on to track
+    RPR.InsertMedia(str(file.resolve()), 0)
+    track = project.tracks[0]
+    clip_len = project.cursor_position
+    track.items[-1].delete()
+    project.cursor_position = 0
+    return clip_len
+
+
 def generate_data(args):
     """
     The main data generation function
@@ -199,19 +209,23 @@ def generate_data(args):
     # Start Reaper project
     project = reapy.Project()
 
+    clip_len = get_clip_len(args.di_file, project)
+    print(clip_len)
+
     # Compute sweeps
     sweeper = Sweeper(config)
     file_offset = 0
     for sweep_name, sweep in sweeper.sweeps:
         sweep = list(sweep)
-        print(f"Performing sweep {sweep_name}")
         # # Print stats on sweep beforehand
-        # if args.verbose:
-        #     time_in_seconds = len(sweeps) * clip_len
-        #     size_in_mb = byte_to_str(time_in_seconds * args.mb_per_second)
-        #     msg(f"Beginning sweep of {len(sweeps)} settings, recording {clip_len}s of each.")
-        #     msg(f"This will create roughly {seconds_to_str(time_in_seconds)} ({size_in_mb}) of audio.")
-        perform_sweep(sweep, project, config.vst_name, config.default_values(), args, file_offset)
+        if args.verbose:
+            time_in_seconds = len(sweeps) * clip_len
+            size_in_mb = byte_to_str(time_in_seconds * args.mb_per_second)
+            msg(f"Performing sweep {sweep_name}")
+            msg(f"Beginning sweep of {len(sweeps)} settings, recording {clip_len}s of each.")
+            msg(f"This will create roughly {seconds_to_str(time_in_seconds)} ({size_in_mb}) of audio.")
+        render_data(sweep, clip_len, project, config.vst_name, config.default_values(), args)
+        split_data(args, clip_len, len(sweep), file_offset)
         file_offset += len(sweep)
 
     # write out settings in index file
@@ -223,18 +237,9 @@ def generate_data(args):
 
 
 
-def get_clip_len(file: Path, project: Project):
-    cp = project.cursor_position
-    # Load DI on to track
-    RPR.InsertMedia(str(file.resolve()), 0)
-    track = project.tracks[0]
-    clip_len = project.cursor_position
-    track.items[-1].delete()
-    project.cursor_position = cp
-    return clip_len
 
 
-def perform_sweep(sweep, project, vst_name, default_values, args, idx_offset):
+def render_data(sweep, clip_len, project, vst_name, default_values, args):
 #    print(list(sweep))
     # Delete all old tracks (and therefore the VST and envelopes)
     for track in project.tracks:
@@ -259,10 +264,7 @@ def perform_sweep(sweep, project, vst_name, default_values, args, idx_offset):
                       margin=args.margin)
 
 
-    # print("cp: ", project.cursor_position)
-    clip_len = int(project.cursor_position / num_settings)
-    # print(clip_len)
-
+#    clip_len = int(project.cursor_position / num_settings)
 
     # Now that there is a track of audio, reference it
     track = project.tracks[0]
@@ -304,12 +306,16 @@ def perform_sweep(sweep, project, vst_name, default_values, args, idx_offset):
         msg("Rendering...")
     RPR.Main_OnCommand(42230, 0)
 
+
+def split_data(args, clip_len, num_settings, idx_offset):
     # Postprocess the rendered file
     if args.verbose:
         msg("Processing rendered file...")
+
     # Identify the most recent .wav in Reaper output dir
     reaper_output_files = args.reaper_dir.glob('*.wav')
     rendered_file = max(reaper_output_files, key=lambda p: p.stat().st_ctime)
+
     # Split into chunks into the provided new output dir
     split_audio(rendered_file, clip_len + args.margin, args.output_dir, idx_offset)
 
