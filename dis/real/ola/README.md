@@ -1,51 +1,23 @@
-# ToneRender DI Files
+# Ola DI Files
 
-Here you can find a set of sample DIs for use when sampling tones from Amplifier/Effect VSTs.  The goal of the DIs is to be short, so as to be usable in parameter searches of tens of thousands of parameter settings, and to be diverse, covering a wide variety of genres, styles, and notes.
+Files distributed for academic purposes with permission from Ola Englund.  All files are from the Deluxe Edition of the Feared album "Refeared" and can be reproduced from the DI distribution as follows:
 
-DI Files:
+- 000_ola_metal_clean.wav
 
-- General
-  A general purpose DI to cover a basic set of chords and notes
+  From 'A Regret - 113 bpm', 'Audio 2_bip.wav', processed with sox trim 142.3 6.2
 
-- Blues
-  In the style of B.B. King
-  
-- Classical
-  In the style of Paganini and Satie
+- 001_ola_metal_rhythm.wav
 
-- Classic Rock
-  In the style of AC/DC
-  
-- Country
-  In the style of Johnny Hiland
-  
-- Death Metal
-	In the style of At the Gates, Haunted, Gojira, Sylosis
+  From 'Antisocial - 140 bpm', Guitar Right_bip.wav', processed with sox trim 170 10
 
-- Djent
-	In the style of Periphery, Meshuggah
+- 002_ola_metal_rhythm.wav
 
-- Doom / Stoner
-	In the style of BORIS, Sleep, The Sword
+  From 'Breaking The Cycle - 160 bpm', 'Guitar Right_bip.wav', processed with sox trim 206 12
 
-- Funk
-  In the style of
+- 003_ola_metal_rhythm.wav
 
-- Fusion
-  In the style of Andy Timmons, Eric Johnson
-  
-- Jazz
-  In the style of John Scofield, Robben Ford
-  
-- [Progressive Metal](https://github.com/narad/tone-render/tree/main/dis/prog-metal)
-  In the style of Dream Theater
-  
-- Math Rock
-  In the style of Yvette Young / toe
+  From 'Bullied - 130 bpm', 'Guitar Right_bip.wav', processed with sox trim 428.5 12
 
-- Shred / Neoclassical
-	In the style of Yngwie Malmsteen, Paul Gilbert
+- 004_ola_metal_rhythm.wav
 
-
-
-Each of these DIs is the result of rendering a GuitarPro file, exported to MusicXML, imported into Reaper, and rendered using the DI samples of the Kontakt [Electri6ity](https://www.vir2.com/instruments/electri6ity/) plugin.
+  From 'Fall Of Man - 146 bpm', 'Guitar Right_bip.wav', processed with sox trim 32.9 6.5
