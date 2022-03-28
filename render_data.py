@@ -297,7 +297,13 @@ def render_data(sweep, clip_len, project, vst_name, default_values, args):
     time = 0
     for setting in sweep:
         for param_name, param_val in setting.items():
-            RPR.InsertEnvelopePoint(name2env[param_name], time, param_val, 1, 0, False, True)
+            try:
+                RPR.InsertEnvelopePoint(name2env[param_name], time, param_val, 1, 0, False, True)
+            except KeyError:
+                print(f"Parameter {param_name} from the config file not found in VST.")
+                print("List of VST keys found:")
+                for k in name2env.keys():
+                    print(f"  {k}")
         time += clip_len
         time += args.margin
 
