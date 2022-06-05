@@ -1,0 +1,103 @@
+vst: "Fortin Nameless Suite"
+sweeps:
+  - comment: "Hex Drive"
+    params:
+    - name: ['Hex: Drive']
+      min: 0.1
+      max: 1.0
+      step: 0.1
+    - name: ['Hex: Tone']
+      min: 0.1
+      max: 1.0
+      step: 0.1
+    - name: ['Hex: Volume']
+      min: 0.1
+      max: 1.0
+      step: 0.2
+defaults:
+  - name: Input Gain
+    value: 0.50
+  - name: Output Gain
+    value: 0.68
+  - name: ----
+    value: 1.00
+  - name: ----
+    value: 1.00
+  - name: Channel
+    value: 1.00
+  - name: Pedal Section Bypass
+    value: 1.00
+  - name: Booster On
+    value: 1.00
+  - name: Booster Amount
+    value: 0.35
+  - name: Zuul On
+    value: 1.00
+  - name: Zuul Amount
+    value: 0.35
+  - name: "Hex: On/Off"
+    value: 1.00
+  - name: "Hex: Drive"
+    value: 0.00
+  - name: "Hex: Tone"
+    value: 0.50
+  - name: "Hex: Volume"
+    value: 1.00
+  - name: Head On
+    value: 0.00
+  - name: Gain 1
+    value: 0.30
+  - name: Gain 2
+    value: 0.40
+  - name: Treble
+    value: 0.80
+  - name: Mid
+    value: 0.0
+  - name: Bass
+    value: 0.75
+  - name: Master
+    value: 0.50
+  - name: Presence
+    value: 0.18
+  - name: Pull Gain On
+    value: 0.00
+  - name: Headlight
+    value: 1.00
+  - name: CabSimOn
+    value: 0.00
+  - name: CabSim 1 Enabled
+    value: 1.00
+  - name: CabSim 1 Gain
+    value: 0.80
+  - name: CabSim 1 Axis
+    value: 0.50
+  - name: CabSim 1 Distance
+    value: 0.00
+  - name: CabSim 1 Pan
+    value: 0.50
+  - name: CabSim 1 Mic Type
+    value: 0.00
+  - name: CabSim 1 Phase
+    value: 0.00
+  - name: CabSim 2 Enabled
+    value: 1.00
+  - name: CabSim 2 Gain
+    value: 0.80
+  - name: CabSim 2 Axis
+    value: 0.50
+  - name: CabSim 2 Distance
+    value: 0.00
+  - name: CabSim 2 Pan
+    value: 0.50
+  - name: CabSim 2 Mic Type
+    value: 0.50
+  - name: CabSim 2 Phase
+    value: 0.00
+  - name: Gate Threshold
+    value: 0.27
+  - name: Bypass
+    value: 0.00
+  - name: Wet
+    value: 1.00
+  - name: Delta
+    value: 0.00
