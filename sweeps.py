@@ -37,8 +37,9 @@ class Sweeper:
             settings = [{}]
 
         for setting in settings:
-            for v in range(int(first.min_val * 10), int(first.max_val * 10) + 1, int(first.step*10)):
-                v = v / 10
+            mult = 100
+            for v in range(int(first.min_val * mult), int(first.max_val * mult) + 1, int(first.step * mult)):
+                v = v / mult
                 z = {**setting, **{pname : v for pname in first.names}}
                 yield z
 

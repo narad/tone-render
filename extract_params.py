@@ -57,7 +57,8 @@ def extract_params(args: argparse.Namespace) -> None:
             if args.format == "tsv":
                 output.write(f"{i}\t{param.name}\t{param}\n")
             elif args.format == "yaml":
-                output.write(f"  - name: {param.name}\n")
+                clean_name = f"\"{param.name}\"" if ':' in param.name else param.name
+                output.write(f"  - name: {clean_name}\n")
                 output.write(f"    value: {param:.2f}\n")
 
     # Close stream

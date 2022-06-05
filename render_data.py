@@ -154,6 +154,7 @@ def split_audio(wav_file, clip_len, output_dir, idx_offset=0) -> None:
         None
     """
     # Split into chunks
+    print(wav_file)
     audio = AudioSegment.from_file(wav_file , "wav")
     chunk_length_ms = clip_len * 1000 # pydub calculates in millisec
     chunks = make_chunks(audio, chunk_length_ms)
@@ -191,6 +192,17 @@ def get_clip_len(file: Path, project: Project):
     track.items[-1].delete()
     project.cursor_position = 0
     return clip_len
+
+
+def warmup(file: Path, project: Project):
+    project.cursor_position = 0
+    # Load DI on to track
+    RPR.InsertMedia(str(file.resolve()), 0)
+    track = project.tracks[0]
+    RPR.Main_OnCommand(42230, 0)
+    track.items[-1].delete()
+    project.cursor_position = 0
+
 
 
 def generate_data(args):
@@ -246,6 +258,8 @@ def render_data(sweep, clip_len, project, vst_name, default_values, args):
         track.delete()
     project.cursor_position = 0
 
+#    warmup(args.di_file, project)
+
     # Loop DI to match the number of settings changes
     num_settings = len(sweep)
     print("num settings = ", num_settings)
@@ -266,11 +280,15 @@ def render_data(sweep, clip_len, project, vst_name, default_values, args):
 
 #    clip_len = int(project.cursor_position / num_settings)
 
+
     # Now that there is a track of audio, reference it
     track = project.tracks[0]
 
     # Load VST
-    track.add_fx(vst_name) #config.vst_name)
+    fx = track.add_fx(vst_name) #config.vst_name)
+#    fx.make_online()
+#    fx.open_ui()
+
 
     # Read VST params
     fx_number = 0
@@ -307,6 +325,18 @@ def render_data(sweep, clip_len, project, vst_name, default_values, args):
         time += clip_len
         time += args.margin
 
+
+    # Warmup / required to fix audio glitch at the start of
+    # recording in some environments
+    if args.warmup_time > 0:
+        import time
+        project.cursor_position = 0
+        project.play()
+        time.sleep(args.warmup_time)
+        project.pause()
+        project.cursor_position = 0
+
+
     # # Render file
     if args.verbose:
         msg("Rendering...")
@@ -327,6 +357,7 @@ def split_data(args, clip_len, num_settings, idx_offset):
 
     # Clean up
     if args.delete_tmp_files:
+        print("deleting tmp files")
         delete_tmp_files([rendered_file,                            # Output of REAPER
                           args.output_dir / args.sox_di_name,       # Output of SoX
                           args.output_dir / f"{num_settings+idx_offset:08d}.wav" # Excess audio from splitting
@@ -350,7 +381,7 @@ if __name__ == '__main__':
                         help="the method used to copy the DI for each sweep")
     parser.add_argument('--margin', type=float, default=0.1,
                         help="amount of blank audio between DIs in seconds")
-    parser.add_argument('--delete_tmp_files', type=bool, default=True,
+    parser.add_argument('--delete_tmp_files', type=bool, default=False,
                         help="delete the intermediary files made during rendering")
     parser.add_argument('--mb_per_second', type=int, default=139810,
                         help="constant used for estimating diskspace requirement")
@@ -358,6 +389,8 @@ if __name__ == '__main__':
                         help="name of the generated long DI file if using SoX copy_method")
     parser.add_argument('--copy_di', type=bool, default=True, 
                         help="copy the DI file to the output_dir for future reference")
+    parser.add_argument('--warmup_time', type=int, default=15,
+                        help="amount of seconds to play the track prior to recording to prevent audio glitches")
     parser.add_argument('--verbose', type=bool, default=False,
                         help="whether to print logging information")
     args = parser.parse_args()
@@ -375,6 +408,13 @@ if __name__ == '__main__':
 
 
 
+
+
+
+
+
+
+#    fx.open_floating_window()
 
 
 
