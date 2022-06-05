@@ -51,7 +51,7 @@ def extract_params(args: argparse.Namespace) -> None:
 
     # Write out all the VST parameters to stream
     for i, param in enumerate(track.fxs[-1].params):
-        if args.params and param.name not in args.params:
+        if args.params and param.name not in args.params or (args.suppress_midi and "MIDI" in param.name):
             pass
         else:
             if args.format == "tsv":
@@ -78,6 +78,8 @@ if __name__ == '__main__':
     parser.add_argument('--params', type=str, required=False,
                         help='optionally print only a subset of params, given as comma \
                               delimited string')
+    parser.add_argument('--suppress_midi', type=bool, default=True,
+                        help='ignore parameters related to MIDI CC')
     args = parser.parse_args()
     print(type(args))
     extract_params(args)
