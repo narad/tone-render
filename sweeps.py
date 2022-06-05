@@ -46,6 +46,8 @@ class Sweeper:
 
     def write(self, out_file: Path, di_file: Path):
         with open(out_file, "w") as settings_file:
+            settings_file.write(f"vst_name: {self.config.vst_name}\n")
+            settings_file.write(f"device: {self.config.device_name}\n")                    
             settings_file.write(f"di_file: {di_file.name}\n")
             settings_file.write("files:\n")
             i = 0
@@ -80,6 +82,7 @@ class SweepConfig:
         with open(filename) as infile:
             info = yaml.load(infile)
         self.vst_name = info['vst']
+        self.device_name = info['device']
         self.sweeps = [self.parse_sweep(sd) for sd in info['sweeps']]
         self.default_value_dict = { p['name']: p['value'] for p in info['defaults']}
 

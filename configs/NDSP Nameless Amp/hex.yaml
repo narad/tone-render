@@ -1,4 +1,5 @@
 vst: "Fortin Nameless Suite"
+device: "Hex Drive"
 sweeps:
   - comment: "Hex Drive"
     params:

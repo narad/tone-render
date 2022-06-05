@@ -216,6 +216,8 @@ def generate_data(args):
         None
     """
     # Read yaml settings for VST sweep
+    print(args.conf_file)
+    print()
     config = SweepConfig(args.conf_file)
 
     # Start Reaper project
@@ -396,12 +398,26 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # Check args for safety
-    if not args.conf_file.is_file():
-        sys.exit("fConfig file <{args.conf_file}> not found.")
     if not args.di_file.is_file():
         sys.exit(f"DI file <{args.di_file}> not found.")
 
-    generate_data(args)
+    # If a dir, loop through any containing config files
+    if args.conf_file.is_dir():
+        root_output_dir = args.output_dir
+        configs = list([f for f in args.conf_file.iterdir() if f.suffix == '.yaml'])
+        for conf in configs:
+            args.__dict__['conf_file'] = conf
+            args.__dict__['output_dir'] = root_output_dir / conf.stem
+            print(args)
+            generate_data(args)
+
+
+    # otherwise render for just the one provided config file
+    elif args.conf_file.is_file():
+        sys.exit("fConfig file <{args.conf_file}> not found.")
+        generate_data(args)
+    else:
+        print(f"Invalid config file: {args.conf_file}")
 
 
 
