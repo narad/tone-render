@@ -28,8 +28,6 @@ import subprocess
 
 from typing import Dict, List
 
-
-
 # For segmenting processed wavs
 from pydub import AudioSegment
 from pydub.utils import make_chunks
@@ -45,7 +43,7 @@ from utils import seconds_to_str, byte_to_str
 
 
 # How do you want your messages logged?
-MSG_MODE = ['stdout', 'console', 'both'][0]
+#MSG_MODE = ['stdout', 'console', 'both'][0]
 
 
 def msg(message: str) -> None:
@@ -76,8 +74,20 @@ def get_fx_envelopes(track: Track, param_names: List[str], fx_number: int=0, thr
         dict[str,str]: a mapping of envelope names to their corresponding envelope ID str
     """
     name2env = dict()
+    # print("param names from conf:")
+    # for pname in param_names:
+    #     print(pname)
+    # print()
+    # print("param names from VST:")
+    # for i, p in enumerate(track.fxs[0].params):
+    #     print(p.name)
+    # print()
+
+
     for i, p in enumerate(track.fxs[0].params):
+        print(p.name)
         if threshold > 0 and i >= threshold:
+            print("breaking on threshold")
             break
         else:
             # Any parameter that receives a GetFXEnvelope call
@@ -141,7 +151,7 @@ def copy_DI_reapy(project, di_file, times, margin) -> None:
             RPR.InsertMedia(filename, 0)
 
 
-def split_audio(wav_file, clip_len, output_dir, idx_offset=0) -> None:
+def split_audio(wav_file, clip_len, output_dir, idx_offset=0, verbose: bool=False) -> None:
     """
     Splits the rendered audio .wav file into many, one for each setting
 
@@ -154,7 +164,8 @@ def split_audio(wav_file, clip_len, output_dir, idx_offset=0) -> None:
         None
     """
     # Split into chunks
-    print(wav_file)
+    if verbose:
+        msg(f"Splitting {wav_file}...")
     audio = AudioSegment.from_file(wav_file , "wav")
     chunk_length_ms = clip_len * 1000 # pydub calculates in millisec
     chunks = make_chunks(audio, chunk_length_ms)
@@ -227,16 +238,23 @@ def generate_data(args):
     print(clip_len)
 
     # Compute sweeps
-    sweeper = Sweeper(config)
+    sweeper = Sweeper(config, max_samples=args.max_samples)
     file_offset = 0
     for sweep_name, sweep in sweeper.sweeps:
         sweep = list(sweep)
+
+
+        # if args.max_samples > -1 and args.max_samples < len(sweep):
+        #     if args.verbose:
+        #         msg(f"Reducing the number of sweeps in {sweep_name},\n  {len(sweep)} -> {args.max_samples}")
+        #         sweep = sample(sweep, args.max_samples)
+
         # # Print stats on sweep beforehand
         if args.verbose:
-            time_in_seconds = len(sweeps) * clip_len
+            time_in_seconds = len(sweep) * clip_len
             size_in_mb = byte_to_str(time_in_seconds * args.mb_per_second)
             msg(f"Performing sweep {sweep_name}")
-            msg(f"Beginning sweep of {len(sweeps)} settings, recording {clip_len}s of each.")
+            msg(f"Beginning sweep of {len(sweep)} settings, recording {clip_len}s of each.")
             msg(f"This will create roughly {seconds_to_str(time_in_seconds)} ({size_in_mb}) of audio.")
         render_data(sweep, clip_len, project, config.vst_name, config.default_values(), args)
         split_data(args, clip_len, len(sweep), file_offset)
@@ -261,10 +279,9 @@ def render_data(sweep, clip_len, project, vst_name, default_values, args):
     project.cursor_position = 0
 
 #    warmup(args.di_file, project)
+    num_settings = len(sweep)
 
     # Loop DI to match the number of settings changes
-    num_settings = len(sweep)
-    print("num settings = ", num_settings)
     if args.copy_method == "sox":
         # copy via calls out to sox
         copy_DI_sox(project,
@@ -289,7 +306,7 @@ def render_data(sweep, clip_len, project, vst_name, default_values, args):
     # Load VST
     fx = track.add_fx(vst_name) #config.vst_name)
 #    fx.make_online()
-#    fx.open_ui()
+    fx.open_ui()
 
 
     # Read VST params
@@ -300,9 +317,14 @@ def render_data(sweep, clip_len, project, vst_name, default_values, args):
     name2env = get_fx_envelopes(track, 
                                 tunable_parameters, #[p.name for p in config.tunable_parameters()], 
                                 fx_number)
+    print("Found params")
+    for pname in name2env.keys():
+        print(pname)
+    print()
 
     # Set default VST param values from yaml
     plist = track.fxs[fx_number].params
+
     for pname, pvalue in default_values.items(): #config.default_values().items():
         try:
             plist[pname] = pvalue
@@ -320,10 +342,10 @@ def render_data(sweep, clip_len, project, vst_name, default_values, args):
             try:
                 RPR.InsertEnvelopePoint(name2env[param_name], time, param_val, 1, 0, False, True)
             except KeyError:
-                print(f"Parameter {param_name} from the config file not found in VST.")
-                print("List of VST keys found:")
+                msg(f"Parameter {param_name} from the config file not found in VST.")
+                msg("List of VST keys found:")
                 for k in name2env.keys():
-                    print(f"  {k}")
+                    msg(f"  {k}")
         time += clip_len
         time += args.margin
 
@@ -359,24 +381,28 @@ def split_data(args, clip_len, num_settings, idx_offset):
 
     # Clean up
     if args.delete_tmp_files:
-        print("deleting tmp files")
+        if args.verbose:
+            msg("Deleting tmp files...")
         delete_tmp_files([rendered_file,                            # Output of REAPER
                           args.output_dir / args.sox_di_name,       # Output of SoX
                           args.output_dir / f"{num_settings+idx_offset:08d}.wav" # Excess audio from splitting
                           ],
                           verbose=args.verbose)
 
+    if args.verbose:
+        msg("Done.\n")
+
 
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Options for VST rendering.')
-    parser.add_argument('--di_file', type=Path, required=True,
-                        help='path to a DI wav file')
+    parser.add_argument('--di_file', type=str, required=True,
+                        help='path to a DI wav file, as str.  can provide multiple files separated by comma')
     parser.add_argument('--conf_file', type=Path, required=True,
                         help='path to a VST FXParam config file')
     parser.add_argument('--output_dir', type=Path, required=True,
-                        help="the directory where data will be written")
+                        help="the (root) directory where data will be written")
     parser.add_argument('--reaper_dir', type=Path, required=True,
                         help="the directory Reaper writes files to")
     parser.add_argument('--copy_method', type=str, choices=['sox', 'reapy'],
@@ -395,29 +421,48 @@ if __name__ == '__main__':
                         help="amount of seconds to play the track prior to recording to prevent audio glitches")
     parser.add_argument('--verbose', type=bool, default=False,
                         help="whether to print logging information")
+    parser.add_argument('--max_samples', type=int, default=-1,
+                        help="max number of samples.  If less than total specified sweeps, sample uniformly.")
+    parser.add_argument('--logging', type=str, choices=['stdout', 'console', 'both'], default='stdout',
+                        help="destination of logging messages (default is 'stdout', but can also print to REAPER 'console'.")
     args = parser.parse_args()
 
-    # Check args for safety
-    if not args.di_file.is_file():
-        sys.exit(f"DI file <{args.di_file}> not found.")
+    # Set the logging mode
+    global MSG_MODE
+    MSG_MODE = args.logging
 
-    # If a dir, loop through any containing config files
+
+    # Collect possibly multiple DI files
+    di_files = [Path(f) for f in args.di_file.split(',')]
+
+    # Collect possibly multiple conf files
     if args.conf_file.is_dir():
-        root_output_dir = args.output_dir
-        configs = list([f for f in args.conf_file.iterdir() if f.suffix == '.yaml'])
-        for conf in configs:
-            args.__dict__['conf_file'] = conf
-            args.__dict__['output_dir'] = root_output_dir / conf.stem
-            print(args)
+        conf_files = list([f for f in args.conf_file.iterdir() if f.suffix == '.yaml'])
+    else:
+        conf_files = [args.conf_file]
+
+
+    # Loop through all given DI and conf files
+    root_output_dir = args.output_dir
+    for di_file in di_files:
+        for conf_file in conf_files:
+
+            # Check args for safety
+            if not di_file.is_file():
+                sys.exit(f"DI file <{di_file}> not found.")
+            if not conf_file.is_file():
+                sys.exit(f"Config file <{conf_file}> not found.")
+
+            # Set rendering args for this specific run
+            args.__dict__['di_file'] = di_file
+            args.__dict__['conf_file'] = conf_file
+            args.__dict__['output_dir'] = root_output_dir / conf_file.stem / di_file.stem
+            print(args.__dict__['output_dir'])
+            if args.verbose:
+                print(args)
             generate_data(args)
 
 
-    # otherwise render for just the one provided config file
-    elif args.conf_file.is_file():
-        sys.exit("fConfig file <{args.conf_file}> not found.")
-        generate_data(args)
-    else:
-        print(f"Invalid config file: {args.conf_file}")
 
 
 
@@ -426,6 +471,26 @@ if __name__ == '__main__':
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    #     # otherwise render for just the one provided config file
+    #     elif args.conf_file.is_file():
+    #         generate_data(args)
+    #     else:
+    # #        print(f"Invalid config file: {args.conf_file}")
+    #         sys.exit(f"Config file <{args.conf_file}> not found.")
 
 
 

@@ -3,6 +3,8 @@ from typing import Dict, List
 import yaml
 from pathlib import Path
 
+from random import sample
+
 
 class SweepInfo:
 
@@ -23,9 +25,17 @@ class ParamSweep:
 class Sweeper:
 
 
-    def __init__(self, config):
+    def __init__(self, config, max_samples, verbose=True):
         self.config = config        
-        self.sweeps = [(sw.comment, list(self.sweep_helper(sw.params))) for sw in config.sweeps]
+        self.sweeps = [(sw.comment, list(self.sweep_helper(sw.params))) for sw in config.infos]
+        for i in range(0, len(self.sweeps)):
+            sweep_name, sweep = self.sweeps[i]
+            if max_samples > -1 and len(sweep) > max_samples:
+                if verbose:
+                    print(f"Reducing the number of sweeps in {sweep_name},\n  {len(sweep)} -> {max_samples}")
+                sweep = sample(sweep, max_samples)
+                self.sweeps[i] = sweep_name, sweep
+
 
 
     def sweep_helper(self, param_list: List[ParamSweep]):
@@ -52,23 +62,18 @@ class Sweeper:
             settings_file.write("files:\n")
             i = 0
             for sweep_name, sweep in self.sweeps:
-                print("outer sweep: ", sweep_name)
-                print(sweep)
                 for setting in sweep:
-            # for i, setting in enumerate(sweeps):
                     settings_file.write(f"  - filename: {i:08d}.wav\n" +
                                         "    settings:\n")
                     for param_name, param_val in setting.items():
-                        settings_file.write(f"    - {param_name}: {param_val}\n")
+                        settings_file.write(f"    - \"{param_name}\": {param_val}\n")
                     i += 1
-            settings_file.write("- defaults:\n")
+            settings_file.write("defaults:\n")
             for param_name, param_val in self.config.default_values().items():
-                settings_file.write(f"  - name: {param_name}\n")
-                settings_file.write(f"    value: {param_val}\n")
-
-
-    # @staticmethod
-    # def load()
+                settings_file.write(f"    - \"{param_name}\": {param_val}\n")
+                
+                # settings_file.write(f"  - name: \"{param_name}\"\n")
+                # settings_file.write(f"    value: {param_val}\n")
 
 
 
@@ -78,13 +83,13 @@ class SweepConfig:
         self.read(filename)
 
 
-    def read(self, filename) -> None:
+    def read(self, filename, verbose=False) -> None:
         with open(filename) as infile:
             info = yaml.load(infile)
         self.vst_name = info['vst']
         self.device_name = info['device']
-        self.sweeps = [self.parse_sweep(sd) for sd in info['sweeps']]
         self.default_value_dict = { p['name']: p['value'] for p in info['defaults']}
+        self.infos = [self.parse_sweep(sd) for sd in info['sweeps']]
 
 
     def parse_sweep(self, sweep_dict):
@@ -106,6 +111,15 @@ class SweepConfig:
 
     def default_values(self) -> Dict[str, float]:
         return self.default_value_dict
+
+
+
+
+
+
+
+    # @staticmethod
+    # def load()
 
 
 
