@@ -1,0 +1,1 @@
+wget https://storage.googleapis.com/amp-space-synthetic/di/scales_di.zip

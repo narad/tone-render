@@ -1,0 +1,15 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+python-reapy = "==0.10.0"
+pyyaml = "==3.13"
+pydub = "==0.25.1"
+musical-scales = "*"
+
+[dev-packages]
+
+[requires]
+python_version = "3.8"
