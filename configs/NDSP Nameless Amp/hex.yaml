@@ -1,5 +1,8 @@
+brand: "Neural DSP"
 vst: "Fortin Nameless Suite"
 device: "Hex Drive"
+device_type: "Pedal: Drive"
+data_type: "Simulation"
 sweeps:
   - comment: "Hex Drive"
     params:
@@ -19,7 +22,7 @@ defaults:
   - name: Input Gain
     value: 0.50
   - name: Output Gain
-    value: 0.68
+    value: 0.50
   - name: ----
     value: 1.00
   - name: ----
@@ -29,7 +32,7 @@ defaults:
   - name: Pedal Section Bypass
     value: 1.00
   - name: Booster On
-    value: 1.00
+    value: 0.00
   - name: Booster Amount
     value: 0.35
   - name: Zuul On

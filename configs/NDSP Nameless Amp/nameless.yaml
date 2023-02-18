@@ -1,5 +1,8 @@
+brand: "Neural DSP"
 vst: "Fortin Nameless Suite"
-device: "Fortin Nameless"
+device: "Nameless"
+device_type: "Amplifier"
+data_type: "Simulation"
 sweeps:
   - comment: "Tied EQ Gain sweep"
     params:
@@ -39,7 +42,7 @@ defaults:
   - name: Input Gain
     value: 0.50
   - name: Output Gain
-    value: 0.68
+    value: 0.50
   - name: ----
     value: 1.00
   - name: ----

@@ -1,6 +1,11 @@
 from musical_scales import scale, Note
 import argparse
 
+import xml.etree.ElementTree as ET
+from xml.dom import minidom
+import re 
+
+
 header = '''<?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <!DOCTYPE score-partwise PUBLIC
     "-//Recordare//DTD MusicXML 4.0 Partwise//EN"
@@ -106,6 +111,36 @@ dur2name = {
 	8: "sixteenth",
 }
 
+def write_xml(notes, output_file):
+	notes_per_measure = beats_per_measure / name2dur[args.duration]
+	global header
+	global footer
+	lheader = header.replace("XXX", f"{args.scale} {args.duration} note")
+
+	x = lheader
+	if args.one_per_measure:
+		for i, note in enumerate(notes):
+			x += fill_measure([note], beats_per_measure, mcount=i+1, add_rests=args.add_rests)
+	else:
+		# group by appropriate number of notes per measure
+		w = int(notes_per_measure)
+	#	print(w)
+		notes = [notes[i:i+w] for i in range(0, len(notes), w)]
+		for i, notes_in_measure in enumerate(notes):
+	#		print(notes_in_measure)
+			x += fill_measure(notes_in_measure, beats_per_measure, mcount=i+1, add_rests=args.add_rests)
+	x += footer
+
+	# make it pretty
+	tree = ET.fromstring(x.replace("\n", ""))
+	xmlstr = minidom.parseString(ET.tostring(tree)).toprettyxml(indent="   ")
+
+	xmlstr = re.sub(" +\n", "", xmlstr)
+
+	# write to file
+	with open(output_file, "w") as f:
+		f.write(xmlstr)
+
 
 # Notes:
 # Default start/stop notes roughly correspond to 7-string guitar range
@@ -121,7 +156,9 @@ parser.add_argument('--scale', type=str, default="chromatic", help='The type of 
 parser.add_argument('--duration', type=str, default="quarter", help="The duration of the note")
 parser.add_argument('--one_per_measure', type=str, help="Play one note and fill the rest of the measure with rest")
 parser.add_argument('--add_rests', type=bool, default=False, help="Whether to explicitly add rests or not (good for viewing scores)")
+parser.add_argument('--notes_per_file', type=str, choices=['single', 'multiple'], help="Whether to write each note to a separate file.")
 parser.add_argument('--output_file', type=str, default="out.xml", help="Output music XML file")
+parser.add_argument('--output_dir', type=str, default="./", help="Output folder for multiple music XML files")
 parser.add_argument('--direction', type=str, choices=['ascending', 'descending'], default='ascending', help="Direction of the scale")
 args = parser.parse_args()
 
@@ -139,40 +176,16 @@ notes = [parse_note(note) + (name2dur[args.duration],) for note in notes]
 if args.direction == "descending":
 	notes.reverse()
 
+if args.notes_per_file == 'single':
+	for note in notes:
+		print(note)
+		letter, octave, dur_int = note
+		dur = dur2name[dur_int]
+		write_xml([note],
+			        output_file=f"{args.output_dir}{letter}{str(octave)}_{dur}.xml")
 
-notes_per_measure = beats_per_measure / name2dur[args.duration]
-
-header = header.replace("XXX", f"{args.scale} {args.duration} note")
-
-
-x = header
-if args.one_per_measure:
-	for i, note in enumerate(notes):
-		x += fill_measure([note], beats_per_measure, mcount=i+1, add_rests=args.add_rests)
 else:
-	# group by appropriate number of notes per measure
-	w = int(notes_per_measure)
-#	print(w)
-	notes = [notes[i:i+w] for i in range(0, len(notes), w)]
-	for i, notes_in_measure in enumerate(notes):
-#		print(notes_in_measure)
-		x += fill_measure(notes_in_measure, beats_per_measure, mcount=i+1, add_rests=args.add_rests)
-x += footer
-
-
-# make it pretty
-import xml.etree.ElementTree as ET
-from xml.dom import minidom
-
-tree = ET.fromstring(x.replace("\n", ""))
-xmlstr = minidom.parseString(ET.tostring(tree)).toprettyxml(indent="   ")
-
-import re 
-xmlstr = re.sub(" +\n", "", xmlstr)
-
-# write to file
-with open(args.output_file, "w") as f:
-	f.write(xmlstr)
+	write_xml(notes, args.output_file)
 
 
 

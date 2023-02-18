@@ -1,8 +1,6 @@
 from typing import Dict, List
-#from param import Param
 import yaml
 from pathlib import Path
-
 from random import sample
 
 
@@ -56,8 +54,11 @@ class Sweeper:
 
     def write(self, out_file: Path, di_file: Path):
         with open(out_file, "w") as settings_file:
+            settings_file.write(f"brand: {self.config.brand_name}\n")
             settings_file.write(f"vst_name: {self.config.vst_name}\n")
             settings_file.write(f"device: {self.config.device_name}\n")                    
+            settings_file.write(f"device_type: {self.config.device_type}\n")                    
+            settings_file.write(f"data_type: {self.config.data_type}\n")                    
             settings_file.write(f"di_file: {di_file.name}\n")
             settings_file.write("files:\n")
             i = 0
@@ -85,9 +86,12 @@ class SweepConfig:
 
     def read(self, filename, verbose=False) -> None:
         with open(filename) as infile:
-            info = yaml.load(infile)
+            info = yaml.safe_load(infile)
+        self.brand_name = info['brand']
         self.vst_name = info['vst']
         self.device_name = info['device']
+        self.device_type = info['device_type']
+        self.data_type = info['data_type']
         self.default_value_dict = { p['name']: p['value'] for p in info['defaults']}
         self.infos = [self.parse_sweep(sd) for sd in info['sweeps']]
 
