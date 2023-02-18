@@ -30,6 +30,25 @@ Currently ToneRender only supports condition sample generation, i.e., some audio
 
 ### 3. Specifying a Parameter Sweep
 
+# Other uses
+
+Other code which may be useful was developed to create synthetic DI files, is the rendery_single.py script.  In essence, this script works in the opposite way from the render_data.py script: it takes in multiple media files (could be DIs, but also MIDI or musicXML), and processes them through a single VST setting in REAPER.  This makes it ideal for creating data from MIDI-triggered sample library VSTs, was used to general single note DI files available in the synthetic DIs folder.
+
+### 1. Create a set of media files.  The scales scripts can be used to do just that:
+
+`python scripts/scales.py --scale chromatic --one_per_measure True --notes_per_file single --duration half --output_dir media_files/`
+
+This will generate a set musicXML files, where each file represents a single note from B1 to E6 on the chromatic scale.
+
+### 2. Setup a VST
+
+In this case the goal is to create guitar DI samples for every note in the chromatic scale.  This requires an appropriate VST.  In this case I set the track FX to load the Ample Metal Hellrazer plugin, and turned off all effects, so each musicXML event will trigger the playing of a recorded DI sample from a real guitar.
+
+### 3. Render the data
+
+`python render_single.py --input_dir media_files/ --output_dir note_wavs/ --reaper_dir ~/Documents/REAPER\ Media/`
+
+This will generate a corresponding set of audio files, where each file is named identically (but with a .wav extension), and can be used as DI for reamping.  This makes it simple and straightforward to create a dataset of from sounds that can be triggered from MIDI events, such as drum or keyboard samples.
 
 ## Requirements
 
