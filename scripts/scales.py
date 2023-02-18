@@ -1,5 +1,6 @@
 from musical_scales import scale, Note
 import argparse
+from pathlib import Path
 
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
@@ -112,9 +113,10 @@ dur2name = {
 }
 
 def write_xml(notes, output_file):
-	notes_per_measure = beats_per_measure / name2dur[args.duration]
 	global header
 	global footer
+
+	notes_per_measure = beats_per_measure / name2dur[args.duration]
 	lheader = header.replace("XXX", f"{args.scale} {args.duration} note")
 
 	x = lheader
@@ -158,7 +160,7 @@ parser.add_argument('--one_per_measure', type=str, help="Play one note and fill 
 parser.add_argument('--add_rests', type=bool, default=False, help="Whether to explicitly add rests or not (good for viewing scores)")
 parser.add_argument('--notes_per_file', type=str, choices=['single', 'multiple'], help="Whether to write each note to a separate file.")
 parser.add_argument('--output_file', type=str, default="out.xml", help="Output music XML file")
-parser.add_argument('--output_dir', type=str, default="./", help="Output folder for multiple music XML files")
+parser.add_argument('--output_dir', type=Path, default="./", help="Output folder for multiple music XML files")
 parser.add_argument('--direction', type=str, choices=['ascending', 'descending'], default='ascending', help="Direction of the scale")
 args = parser.parse_args()
 
@@ -176,13 +178,17 @@ notes = [parse_note(note) + (name2dur[args.duration],) for note in notes]
 if args.direction == "descending":
 	notes.reverse()
 
+# Make output dir if not existing
+args.output_dir.mkdir(parents=True, exist_ok=True)
+
+# Process
 if args.notes_per_file == 'single':
 	for note in notes:
 		print(note)
 		letter, octave, dur_int = note
 		dur = dur2name[dur_int]
 		write_xml([note],
-			        output_file=f"{args.output_dir}{letter}{str(octave)}_{dur}.xml")
+			        output_file=args.output_dir / f"{letter}{str(octave)}_{dur}.xml")
 
 else:
 	write_xml(notes, args.output_file)

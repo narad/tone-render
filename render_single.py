@@ -20,7 +20,7 @@ import sys
 import xml
 import os
 import argparse
-import tqdm
+from tqdm import tqdm
 from pathlib import Path
 
 import reapy
@@ -28,12 +28,12 @@ import reapy.reascript_api as RPR
 import subprocess
 
 
-def main(media_dir, output_dir, reaper_dir)
+def main(media_dir, output_dir, reaper_dir, max_len):
     # Start Reaper project
     project = reapy.Project()
     track = project.tracks[0]
 
-    for media_file in tqdm(media_folder.glob('*.xml')):
+    for media_file in tqdm(list(media_dir.glob('*.xml'))):
         # Clear the track
         project.cursor_position = 0
         try:
@@ -42,7 +42,7 @@ def main(media_dir, output_dir, reaper_dir)
             pass
 
         # Put media on track
-        RPR.InsertMedia(str(media_file), 0) 
+        RPR.InsertMedia(str(media_file.resolve()), 0) 
 
         # Render the audio
         RPR.Main_OnCommand(42230, 0)
@@ -52,17 +52,29 @@ def main(media_dir, output_dir, reaper_dir)
         rendered_file = max(reaper_output_files, key=lambda p: p.stat().st_ctime)
 
         # Move file to output and rename
-        output_filename = Path(media_file).stem
-        print(output_filename)
-        # cmd = f"mv {rendered_file} {output_folder}{output_filename}.wav"
-        # print(cmd)
+        output_file = output_dir / f"{media_file.stem}.wav"
         process = subprocess.run(["mv",
             rendered_file,
-            f"{output_folder}{output_filename}.wav"
+            output_file,
             ],
             stdout=subprocess.PIPE,
             universal_newlines=True)
-
+        if max_len > 0:
+            process = subprocess.run(["sox",
+                output_file,
+                "/tmp/trimmed.wav",
+                "trim",
+                "0",
+                str(max_len)
+                ],
+                stdout=subprocess.PIPE,
+                universal_newlines=True)
+            process = subprocess.run(["mv",
+                "/tmp/trimmed.wav",
+                output_file
+                ],
+                stdout=subprocess.PIPE,
+                universal_newlines=True)
 
 
 
@@ -76,7 +88,13 @@ if __name__ == '__main__':
                         help="the (root) directory where data will be written")
     parser.add_argument('--reaper_dir', type=Path, required=True,
                         help="the directory Reaper writes files to")
+    parser.add_argument('--max_len', type=float, default=-1,
+                        help="the max length for rendered files")
     args = parser.parse_args()
 
-    main(args.input_dir, args.output_dir, args.reaper_dir)
+    # Make output dir if not existing
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+
+
+    main(args.input_dir, args.output_dir, args.reaper_dir, args.max_len)
 
