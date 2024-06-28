@@ -5,9 +5,13 @@ __pycache__/
 
 # Data
 di/synth/scales/wav
+di/synth/scales/scales_data
+*.reapeaks
+*.zip
 
 # Mac stuff
 .DS_Store
+*__MACOSX/
 
 # C extensions
 *.so

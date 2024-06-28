@@ -1,0 +1,32 @@
+vst: "AmpKnob - RevC"
+device: "AmpKnob - RevC"
+sweeps:
+  - comment: "Gain Sweep"
+    params:
+    - name: ["Amp Gain"]
+      min: 0.05
+      max: 1.00
+      step: 0.05
+    - name: ["Cab On"]
+      min: 0.00
+      max: 1.00
+      step: 1.00
+defaults:
+  - name: "Output Volume"
+    value: 0.67
+  - name: "Input Volume"
+    value: 0.67
+  - name: "Gate Threshold"
+    value: 0.46
+  - name: "Gate Enable"
+    value: 0.00
+  - name: "Standby"
+    value: 1.00
+  - name: "Tuner Pitch"
+    value: 0.50
+  - name: "Bypass"
+    value: 0.00
+  - name: "Wet"
+    value: 1.00
+  - name: "Delta"
+    value: 0.00
